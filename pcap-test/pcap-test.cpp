@@ -1,26 +1,28 @@
-#include <pcap.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdint.h>
+#include <pcap.h>        // 패킷 캡처
+#include <cstdio>        // printf, fprintf (C의 <stdio.h>에 해당)
+#include <cstdint>       // uint8_t 등 (C의 <stdint.h>에 해당)
+#include <iostream>      // std::cout (usage 함수에서 사용)
+#include <arpa/inet.h>   // ntohs()
 
 void usage() {
-	printf("syntax: pcap-test <interface>\n");
-	printf("sample: pcap-test wlan0\n");
+	std::cout << "syntax: pcap-test <interface>\n";
+	std::cout << "sample: pcap-test wlan0\n";
 }
 
-typedef struct {
+struct Param {
 	char* dev_;
-} Param;
+};
 
 Param param = {
 	.dev_ = NULL
 };
 
+#pragma pack(push,1)
 struct EthHeader {
 	uint8_t dstMac[6];
 	uint8_t srcMac[6];
 	uint16_t ethType;
-} __attribute__((packed));
+};
 
 struct IPv4Header {
 	uint8_t verihl; //version + IHL
@@ -33,7 +35,7 @@ struct IPv4Header {
 	uint16_t checksum;
 	uint32_t srcIpAdd;
 	uint32_t dstIpAdd;
-} __attribute__((packed));
+};
 
 struct TCPHeader {
 	uint16_t srcPort;
@@ -45,8 +47,8 @@ struct TCPHeader {
 	uint16_t window;
 	uint16_t checksum;
 	uint16_t urgPointer;
-} __attribute__((packed));
-
+};
+#pragma pack(pop)
 
 
 
