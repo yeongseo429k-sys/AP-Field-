@@ -106,8 +106,9 @@ void parseSSID(const uint8_t* tagStart, int tagLen, string& ssidOut)
             if (tag->length_ > 0)
                 ssidOut.assign(reinterpret_cast<const char*>(tag->value()),tag->length_);
         }
-
+        pos += 2 + tag->length_;
     }
+
 }
 
 // pcap 열기
