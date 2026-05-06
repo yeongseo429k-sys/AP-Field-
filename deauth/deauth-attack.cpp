@@ -90,7 +90,7 @@ void printInfo() {
     printf("AP : %s\n", args_.apMac.toString().data());
     if (args_.hasStation)
         printf("STA : %s\n", args_.staMac.toString().data());
-    printf("Iface : %s\n", args_.iface);
+    printf("Iface : %s\n\n", args_.iface);
 }
 
 void sendBroadcast(pcap_t* handle, const Mac& apMac) {
@@ -106,11 +106,15 @@ void sendUnicast(pcap_t* handle, const Mac& apMac, const Mac& staMac) {
 
 void attackLoop(pcap_t* handle) {
     while (true) {
+        int count =0;
         if (!args_.hasStation)
             sendBroadcast(handle, args_.apMac);
         else
             sendUnicast(handle, args_.apMac, args_.staMac);
 
+        count++;
+        printf("\r[*] Sent %d deauth packets...", count);
+        
         usleep(100000);
     }
 }
