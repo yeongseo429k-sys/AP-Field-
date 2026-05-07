@@ -105,8 +105,9 @@ void sendUnicast(pcap_t* handle, const Mac& apMac, const Mac& staMac) {
 }
 
 void attackLoop(pcap_t* handle) {
+    int count =0;
     while (true) {
-        int count =0;
+        
         if (!args_.hasStation)
             sendBroadcast(handle, args_.apMac);
         else
