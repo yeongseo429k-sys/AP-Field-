@@ -8,15 +8,19 @@ pkg_check_modules(PCAP REQUIRED libpcap)
 qt_standard_project_setup()
 
 qt_add_executable(csa-attack
-    csa-attack.cpp
-    radiotap.h radiotap.cpp
-    dot11.h dot11.cpp
-    mac.h mac.cpp
-    param.h param.cpp
-    pch.h
+    src/csa-attack.cpp
+    include/radiotap.h src/radiotap.cpp
+    include/dot11.h src/dot11.cpp
+    include/mac.h src/mac.cpp
+    include/param.h src/param.cpp
+    include/pch.h
 )
 
-target_include_directories(csa-attack PRIVATE ${PCAP_INCLUDE_DIRS})
+target_include_directories(csa-attack PRIVATE
+    ${PCAP_INCLUDE_DIRS}
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/src
+)
 
 target_link_libraries(csa-attack
     PRIVATE

