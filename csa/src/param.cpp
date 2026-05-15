@@ -11,11 +11,11 @@ void usage(const char* prog) {
 
 bool parseArgs(int argc, char* argv[]) {
     if (argc < 3) return false;
-    args_.iface      = argv[1];
-    args_.apMac      = Mac(argv[2]);
-    args_.hasStation  = false;
+    args_.iface = argv[1];
+    args_.apMac = Mac(argv[2]);
+    args_.hasStation = false;
     if (argc >= 4) {
-        args_.staMac     = Mac(argv[3]);
+        args_.staMac = Mac(argv[3]);
         args_.hasStation = true;
     }
     return true;
