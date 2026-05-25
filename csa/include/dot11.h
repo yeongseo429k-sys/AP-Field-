@@ -47,6 +47,13 @@ struct BeaconHdr : public Dot11Hdr {
         uint8_t channelSwitchCount;
     };
 
+    struct EcsaTag : Tag {
+        uint8_t switchMode;
+        uint8_t newOpClass;
+        uint8_t newChannel;
+        uint8_t switchCount;
+    };
+
     Tag* firstTag() const {
         return (Tag*)((uint8_t*)this + sizeof(Dot11Hdr) + sizeof(Fix));
     }
